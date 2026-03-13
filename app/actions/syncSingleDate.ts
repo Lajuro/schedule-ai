@@ -105,10 +105,12 @@ export async function syncSingleDate(
   } catch (error: unknown) {
     console.error(`Erro ao sincronizar ${dateStr}:`, error);
 
-    const errCode = (error as { code?: number })?.code;
+    const errCode = (error as { code?: number | string })?.code;
+    const errStatus = (error as { response?: { status?: number } })?.response?.status;
     const errMessage = (error as { message?: string })?.message || "";
+    const statusCode = errStatus || (typeof errCode === "number" ? errCode : Number(errCode));
 
-    if (errCode === 401 || errMessage.includes("invalid authentication credentials")) {
+    if (statusCode === 401 || errMessage.includes("invalid authentication credentials")) {
       return {
         success: false,
         date: dateStr,
@@ -118,7 +120,7 @@ export async function syncSingleDate(
       };
     }
 
-    if (errCode === 403) {
+    if (statusCode === 403) {
       return {
         success: false,
         date: dateStr,

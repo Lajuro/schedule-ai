@@ -147,7 +147,7 @@ export default function ScheduleConfirmation({
       } catch {
         setSyncStatuses((prev) => {
           const newMap = new Map(prev);
-          newMap.set(date, { date, status: "error", message: "Erro inesperado" });
+          newMap.set(date, { date, status: "error", message: "Erro inesperado", errorCode: "unknown" });
           return newMap;
         });
       }
