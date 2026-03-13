@@ -32,6 +32,7 @@ export default function ScheduleConfirmation({
   const [selectedDays, setSelectedDays] = useState<Set<string>>(
     new Set(data.work_days)
   );
+  const [currentMonth, setCurrentMonth] = useState(data.detected_month);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncStatuses, setSyncStatuses] = useState<Map<string, SyncStatus>>(
     new Map()
@@ -52,6 +53,27 @@ export default function ScheduleConfirmation({
       return newSet;
     });
   }, [isSyncing]);
+
+  const handleMonthChange = useCallback((newMonth: string) => {
+    const [newYear, newMonthNum] = newMonth.split("-").map(Number);
+    const daysInNewMonth = new Date(newYear, newMonthNum, 0).getDate();
+
+    // Remap every selected date to the new year/month, dropping invalid days
+    setSelectedDays((prev) => {
+      const remapped = new Set<string>();
+      prev.forEach((date) => {
+        const dayNum = parseInt(date.split("-")[2], 10);
+        if (dayNum <= daysInNewMonth) {
+          remapped.add(
+            `${newYear}-${String(newMonthNum).padStart(2, "0")}-${String(dayNum).padStart(2, "0")}`
+          );
+        }
+      });
+      return remapped;
+    });
+
+    setCurrentMonth(newMonth);
+  }, []);
 
   const handleSync = async () => {
     if (selectedDays.size === 0) return;
@@ -266,10 +288,12 @@ export default function ScheduleConfirmation({
           transition={{ delay: 0.2 }}
         >
           <CalendarPicker
-            month={data.detected_month}
+            month={currentMonth}
             selectedDays={selectedDays}
             onToggleDay={toggleDay}
             processedDays={processedDays}
+            onMonthChange={handleMonthChange}
+            disableMonthEdit={isSyncing}
           />
         </motion.div>
       </div>

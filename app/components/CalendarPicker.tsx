@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
 interface CalendarPickerProps {
@@ -9,6 +9,8 @@ interface CalendarPickerProps {
   onToggleDay: (date: string) => void;
   highlightedDays?: Set<string>; // dias sendo processados
   processedDays?: Set<string>; // dias já sincronizados
+  onMonthChange?: (newMonth: string) => void; // callback para editar mês/ano manualmente
+  disableMonthEdit?: boolean; // desabilita edição durante sincronização
 }
 
 export default function CalendarPicker({
@@ -17,8 +19,22 @@ export default function CalendarPicker({
   onToggleDay,
   highlightedDays = new Set(),
   processedDays = new Set(),
+  onMonthChange,
+  disableMonthEdit = false,
 }: CalendarPickerProps) {
   const [year, monthNum] = month.split("-").map(Number);
+
+  const [isEditingMonth, setIsEditingMonth] = useState(false);
+  const [editYear, setEditYear] = useState(String(year));
+  const [editMonthNum, setEditMonthNum] = useState(String(monthNum));
+
+  // Keep edit form values in sync when the month prop changes from outside
+  useEffect(() => {
+    if (!isEditingMonth) {
+      setEditYear(String(year));
+      setEditMonthNum(String(monthNum));
+    }
+  }, [year, monthNum, isEditingMonth]);
   
   // Primeiro dia do mês
   const firstDay = new Date(year, monthNum - 1, 1);
@@ -61,13 +77,97 @@ export default function CalendarPicker({
     return dayOfWeek === 0 || dayOfWeek === 6;
   };
 
+  const handleOpenEdit = () => {
+    setEditYear(String(year));
+    setEditMonthNum(String(monthNum));
+    setIsEditingMonth(true);
+  };
+
+  const handleConfirmEdit = () => {
+    const parsedYear = parseInt(editYear, 10);
+    const parsedMonth = parseInt(editMonthNum, 10);
+    if (
+      !isNaN(parsedYear) &&
+      parsedYear >= 2000 &&
+      parsedYear <= 2100 &&
+      parsedMonth >= 1 &&
+      parsedMonth <= 12 &&
+      onMonthChange
+    ) {
+      onMonthChange(
+        `${parsedYear}-${String(parsedMonth).padStart(2, "0")}`
+      );
+    }
+    setIsEditingMonth(false);
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditingMonth(false);
+  };
+
   return (
     <div className="rounded-2xl bg-white p-4 shadow-lg dark:bg-gray-900 dark:shadow-gray-950/50 sm:p-6">
       {/* Header do calendário */}
       <div className="mb-4 text-center">
-        <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 sm:text-xl">
-          {monthNames[monthNum - 1]} {year}
-        </h3>
+        {isEditingMonth ? (
+          <div className="flex flex-col items-center gap-2">
+            <div className="flex items-center gap-2">
+              <select
+                value={editMonthNum}
+                onChange={(e) => setEditMonthNum(e.target.value)}
+                className="rounded-lg border border-gray-300 bg-white px-2 py-1 text-sm font-medium text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+              >
+                {monthNames.map((name, idx) => (
+                  <option key={idx + 1} value={idx + 1}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="number"
+                value={editYear}
+                onChange={(e) => setEditYear(e.target.value)}
+                min={2000}
+                max={2100}
+                className="w-20 rounded-lg border border-gray-300 bg-white px-2 py-1 text-sm font-medium text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+              />
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={handleConfirmEdit}
+                className="flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1 text-xs font-semibold text-white hover:bg-blue-700"
+              >
+                <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                </svg>
+                Confirmar
+              </button>
+              <button
+                onClick={handleCancelEdit}
+                className="flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-1 text-xs font-semibold text-gray-600 hover:bg-gray-100 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-800"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center justify-center gap-2">
+            <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 sm:text-xl">
+              {monthNames[monthNum - 1]} {year}
+            </h3>
+            {onMonthChange && !disableMonthEdit && (
+              <button
+                onClick={handleOpenEdit}
+                title="Editar mês e ano"
+                className="rounded-md p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:text-gray-500 dark:hover:bg-gray-800 dark:hover:text-gray-300"
+              >
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                </svg>
+              </button>
+            )}
+          </div>
+        )}
         <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
           Clique nos dias para adicionar ou remover
         </p>
