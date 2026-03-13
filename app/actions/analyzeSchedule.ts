@@ -34,10 +34,30 @@ export async function analyzeSchedule(
     // Usando gemini-2.5-flash - modelo atual com suporte a visão
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
+    // Contexto temporal para auxiliar a IA a inferir o ano correto
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonthNum = now.getMonth() + 1;
+    const ptMonthNames = [
+      "janeiro", "fevereiro", "março", "abril", "maio", "junho",
+      "julho", "agosto", "setembro", "outubro", "novembro", "dezembro",
+    ];
+    const currentMonthName = ptMonthNames[now.getMonth()];
+    const currentDay = now.getDate();
+    const nextYear = currentYear + 1;
+
     // PROMPT RIGOROSO: Seguindo as instruções do copilot-instructions.md
     const prompt = `Você é um auditor de escalas rigoroso. Analise a imagem do calendário fornecida.
 
 TAREFA: Identificar dias de plantão (marcados com bolinha AZUL).
+
+CONTEXTO TEMPORAL (USE PARA INFERIR O ANO CORRETO):
+- Hoje é ${currentDay} de ${currentMonthName} de ${currentYear} (${String(currentDay).padStart(2, "0")}/${String(currentMonthNum).padStart(2, "0")}/${currentYear}).
+- O calendário na imagem pode não exibir o ano. Use a seguinte lógica para inferir o ano:
+  * Se o mês do calendário >= mês atual (${currentMonthNum}): o ano provável é ${currentYear}.
+  * Se o mês do calendário < mês atual (${currentMonthNum}): o ano provável é ${nextYear}.
+  * Exemplo: se hoje é março/${currentYear} e a imagem mostra "março", use ${currentYear}. Se hoje é dezembro/${currentYear} e a imagem mostra "março", use ${nextYear}.
+- Aplique esta inferência ao campo "detected_month" do JSON.
 
 INSTRUÇÕES OBRIGATÓRIAS:
 - Analise dia por dia, de 1 a 31 (ou até o último dia do mês). Não ignore fins de semana.
