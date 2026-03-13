@@ -7,6 +7,7 @@ interface SingleSyncResult {
   date: string;
   status: "inserted" | "skipped" | "error";
   message: string;
+  errorCode?: "auth" | "permission" | "unknown";
 }
 
 /**
@@ -103,11 +104,38 @@ export async function syncSingleDate(
     };
   } catch (error: unknown) {
     console.error(`Erro ao sincronizar ${dateStr}:`, error);
+
+    const errCode = (error as { code?: number | string })?.code;
+    const errStatus = (error as { response?: { status?: number } })?.response?.status;
+    const errMessage = (error as { message?: string })?.message || "";
+    const statusCode = errStatus || (typeof errCode === "number" ? errCode : Number(errCode));
+
+    if (statusCode === 401 || errMessage.includes("invalid authentication credentials")) {
+      return {
+        success: false,
+        date: dateStr,
+        status: "error",
+        message: "Sessão expirada. Faça logout e login novamente.",
+        errorCode: "auth",
+      };
+    }
+
+    if (statusCode === 403) {
+      return {
+        success: false,
+        date: dateStr,
+        status: "error",
+        message: "Permissão negada. Verifique as permissões do Google Calendar.",
+        errorCode: "permission",
+      };
+    }
+
     return {
       success: false,
       date: dateStr,
       status: "error",
       message: "Erro ao criar evento",
+      errorCode: "unknown",
     };
   }
 }
