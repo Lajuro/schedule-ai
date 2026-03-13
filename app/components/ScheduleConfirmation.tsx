@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import { signOut } from "next-auth/react";
 import { motion, AnimatePresence } from "framer-motion";
 import CalendarPicker from "./CalendarPicker";
 import ImageLightbox from "./ImageLightbox";
@@ -21,6 +22,7 @@ interface SyncStatus {
   date: string;
   status: "pending" | "syncing" | "inserted" | "skipped" | "error";
   message?: string;
+  errorCode?: "auth" | "permission" | "unknown";
 }
 
 export default function ScheduleConfirmation({
@@ -39,6 +41,7 @@ export default function ScheduleConfirmation({
   );
   const [isComplete, setIsComplete] = useState(false);
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
+  const [authError, setAuthError] = useState(false);
 
   const toggleDay = useCallback((date: string) => {
     if (isSyncing) return;
@@ -80,6 +83,7 @@ export default function ScheduleConfirmation({
 
     setIsSyncing(true);
     setIsComplete(false);
+    setAuthError(false);
 
     const sortedDates = Array.from(selectedDays).sort((a, b) =>
       a.localeCompare(b)
@@ -91,10 +95,6 @@ export default function ScheduleConfirmation({
       initialStatuses.set(date, { date, status: "pending" });
     });
     setSyncStatuses(initialStatuses);
-
-    let inserted = 0;
-    let skipped = 0;
-    let errors = 0;
 
     // Sincronizar um por um com delay para UX
     for (const date of sortedDates) {
@@ -117,20 +117,39 @@ export default function ScheduleConfirmation({
             date,
             status: result.status,
             message: result.message,
+            errorCode: result.errorCode,
           });
           return newMap;
         });
 
-        if (result.status === "inserted") inserted++;
-        else if (result.status === "skipped") skipped++;
-        else errors++;
+        if (result.status === "error" && result.errorCode === "auth") {
+          // Se for erro de autenticação, abortar os restantes
+          setAuthError(true);
+
+          // Marcar todos os pendentes como erro de auth
+          setSyncStatuses((prev) => {
+            const newMap = new Map(prev);
+            for (const d of sortedDates) {
+              const current = newMap.get(d);
+              if (current && (current.status === "pending" || current.status === "syncing")) {
+                newMap.set(d, {
+                  date: d,
+                  status: "error",
+                  message: "Sessão expirada",
+                  errorCode: "auth",
+                });
+              }
+            }
+            return newMap;
+          });
+          break;
+        }
       } catch {
         setSyncStatuses((prev) => {
           const newMap = new Map(prev);
-          newMap.set(date, { date, status: "error", message: "Erro" });
+          newMap.set(date, { date, status: "error", message: "Erro inesperado" });
           return newMap;
         });
-        errors++;
       }
     }
 
@@ -338,6 +357,95 @@ export default function ScheduleConfirmation({
               </div>
             </div>
 
+            {/* Banner de erro de autenticação */}
+            {authError && isComplete && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mb-4 rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-950/40"
+              >
+                <div className="flex items-start gap-3">
+                  <div className="rounded-lg bg-red-100 p-2 dark:bg-red-900/50">
+                    <svg
+                      className="h-5 w-5 text-red-600 dark:text-red-400"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                      />
+                    </svg>
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-red-800 dark:text-red-200">
+                      Sessão expirada
+                    </p>
+                    <p className="mt-1 text-sm text-red-700 dark:text-red-300">
+                      Sua autenticação com o Google expirou. Faça login novamente para sincronizar seus plantões.
+                    </p>
+                    <button
+                      onClick={() => signOut({ callbackUrl: "/" })}
+                      className="mt-3 inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-600"
+                    >
+                      <svg
+                        className="h-4 w-4"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+                        />
+                      </svg>
+                      Fazer login novamente
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {/* Banner de erro genérico (não auth) */}
+            {!authError && isComplete && stats.errors > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/40"
+              >
+                <div className="flex items-start gap-3">
+                  <div className="rounded-lg bg-amber-100 p-2 dark:bg-amber-900/50">
+                    <svg
+                      className="h-5 w-5 text-amber-600 dark:text-amber-400"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                      />
+                    </svg>
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-amber-800 dark:text-amber-200">
+                      Alguns plantões não foram sincronizados
+                    </p>
+                    <p className="mt-1 text-sm text-amber-700 dark:text-amber-300">
+                      {stats.errors} {stats.errors === 1 ? "plantão não pôde ser adicionado" : "plantões não puderam ser adicionados"} ao Google Calendar. Tente novamente mais tarde.
+                    </p>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
             {/* Lista de dias com status */}
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
               {Array.from(syncStatuses.entries())
@@ -354,6 +462,7 @@ export default function ScheduleConfirmation({
                       key={date}
                       initial={{ opacity: 0, scale: 0.8 }}
                       animate={{ opacity: 1, scale: 1 }}
+                      title={status.message || ""}
                       className={`flex items-center gap-2 rounded-lg p-2 text-xs ${
                         status.status === "syncing"
                           ? "bg-yellow-50 text-yellow-700 dark:bg-yellow-950/50 dark:text-yellow-300"
@@ -416,7 +525,7 @@ export default function ScheduleConfirmation({
             </div>
 
             {/* Resumo final */}
-            {isComplete && (
+            {isComplete && !authError && (
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
