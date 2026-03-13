@@ -10,6 +10,30 @@ interface SingleSyncResult {
   errorCode?: "auth" | "permission" | "unknown";
 }
 
+interface EventSettings {
+  eventTitle: string;
+  eventColor: string;
+  defaultDuration: number; // em horas
+  reminderMinutes: number[];
+  description: string;
+}
+
+// Mapeia as cores hex do app para os colorIds do Google Calendar
+const hexToColorId: Record<string, string> = {
+  "#3B82F6": "9",  // Azul → Blueberry
+  "#22C55E": "10", // Verde → Basil
+  "#A855F7": "3",  // Roxo → Grape
+  "#F97316": "6",  // Laranja → Tangerine
+  "#EC4899": "4",  // Rosa → Flamingo
+  "#06B6D4": "7",  // Ciano → Peacock
+  "#EF4444": "11", // Vermelho → Tomato
+  "#EAB308": "5",  // Amarelo → Banana
+};
+
+function getColorId(hexColor: string): string {
+  return hexToColorId[hexColor] || "9"; // fallback para Blueberry
+}
+
 /**
  * Sincroniza UMA única data com o Google Calendar
  * Usado para feedback em tempo real
@@ -17,8 +41,15 @@ interface SingleSyncResult {
 export async function syncSingleDate(
   dateStr: string,
   accessToken: string,
+  eventSettings?: EventSettings,
   calendarName: string = "Compromissos"
 ): Promise<SingleSyncResult> {
+  const title = eventSettings?.eventTitle || "Plantão";
+  const description = eventSettings?.description || "Evento criado pelo Escala-IA";
+  const colorId = getColorId(eventSettings?.eventColor || "#3B82F6");
+  const durationHours = eventSettings?.defaultDuration || 12;
+  const reminderMinutes = eventSettings?.reminderMinutes ?? [60, 1440];
+
   try {
     if (!accessToken) {
       return {
@@ -61,13 +92,15 @@ export async function syncSingleDate(
       singleEvents: true,
     });
 
+    const titleLower = title.toLowerCase();
     const hasSimilarEvent = existingEvents.data.items?.some((event) => {
-      const title = event.summary?.toLowerCase() || "";
+      const eventTitle = event.summary?.toLowerCase() || "";
       return (
-        title.includes("plantão") ||
-        title.includes("plantao") ||
-        title.includes("trabalho") ||
-        title.includes("escala")
+        eventTitle.includes(titleLower) ||
+        eventTitle.includes("plantão") ||
+        eventTitle.includes("plantao") ||
+        eventTitle.includes("trabalho") ||
+        eventTitle.includes("escala")
       );
     });
 
@@ -80,19 +113,47 @@ export async function syncSingleDate(
       };
     }
 
+    // Configurar início e fim do evento com base na duração
+    let eventStart: { date?: string; dateTime?: string; timeZone?: string };
+    let eventEnd: { date?: string; dateTime?: string; timeZone?: string };
+
+    if (durationHours === 24) {
+      // Evento de dia inteiro
+      eventStart = { date: dateStr };
+      eventEnd = { date: dateStr };
+    } else {
+      // Evento com horário (início às 07:00 por padrão)
+      eventStart = {
+        dateTime: `${dateStr}T07:00:00-03:00`,
+        timeZone: "America/Sao_Paulo",
+      };
+      eventEnd = {
+        dateTime: `${dateStr}T${String(7 + durationHours).padStart(2, "0")}:00:00-03:00`,
+        timeZone: "America/Sao_Paulo",
+      };
+    }
+
+    // Configurar lembretes
+    const reminders = reminderMinutes.length > 0
+      ? {
+          useDefault: false,
+          overrides: reminderMinutes.map((minutes) => ({
+            method: "popup" as const,
+            minutes,
+          })),
+        }
+      : { useDefault: true };
+
     // Inserir evento
     await calendar.events.insert({
       calendarId: targetCalendarId,
       requestBody: {
-        summary: "Plantão",
-        description: "Plantão adicionado automaticamente via Escala-IA",
-        start: { date: dateStr },
-        end: { date: dateStr },
-        colorId: "9",
-        reminders: {
-          useDefault: false,
-          overrides: [{ method: "popup", minutes: 24 * 60 }],
-        },
+        summary: title,
+        description,
+        start: eventStart,
+        end: eventEnd,
+        colorId,
+        reminders,
       },
     });
 
