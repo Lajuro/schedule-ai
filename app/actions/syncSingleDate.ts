@@ -123,12 +123,15 @@ export async function syncSingleDate(
       eventEnd = { date: dateStr };
     } else {
       // Evento com horário (início às 07:00 por padrão)
+      const startDate = new Date(`${dateStr}T07:00:00-03:00`);
+      const endDate = new Date(startDate.getTime() + durationHours * 60 * 60 * 1000);
+
       eventStart = {
-        dateTime: `${dateStr}T07:00:00-03:00`,
+        dateTime: startDate.toISOString(),
         timeZone: "America/Sao_Paulo",
       };
       eventEnd = {
-        dateTime: `${dateStr}T${String(7 + durationHours).padStart(2, "0")}:00:00-03:00`,
+        dateTime: endDate.toISOString(),
         timeZone: "America/Sao_Paulo",
       };
     }
