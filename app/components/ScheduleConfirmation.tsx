@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import CalendarPicker from "./CalendarPicker";
 import ImageLightbox from "./ImageLightbox";
 import { syncSingleDate } from "../actions/syncSingleDate";
+import { useSettings } from "../providers/SettingsProvider";
 
 interface ScheduleConfirmationProps {
   data: {
@@ -31,6 +32,7 @@ export default function ScheduleConfirmation({
   onBack,
   accessToken,
 }: ScheduleConfirmationProps) {
+  const { settings } = useSettings();
   const [selectedDays, setSelectedDays] = useState<Set<string>>(
     new Set(data.work_days)
   );
@@ -109,7 +111,7 @@ export default function ScheduleConfirmation({
       await new Promise((resolve) => setTimeout(resolve, 150));
 
       try {
-        const result = await syncSingleDate(date, accessToken);
+        const result = await syncSingleDate(date, accessToken, settings);
 
         setSyncStatuses((prev) => {
           const newMap = new Map(prev);
